@@ -23,3 +23,4 @@ doc/sphinx-guides/build
 faces-config.NavData
 src/main/java/BuildNumber.properties
 /nbproject/
+src/main/java/TwoFactor.properties

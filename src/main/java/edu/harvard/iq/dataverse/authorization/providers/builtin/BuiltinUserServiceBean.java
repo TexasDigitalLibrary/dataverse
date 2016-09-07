@@ -1,6 +1,7 @@
 package edu.harvard.iq.dataverse.authorization.providers.builtin;
 
 import edu.harvard.iq.dataverse.search.IndexServiceBean;
+import edu.harvard.iq.dataverse.twofactor.TwoFactorAuthenticationServiceBean;
 import edu.harvard.iq.dataverse.authorization.users.User;
 import edu.harvard.iq.dataverse.passwordreset.PasswordResetData;
 import edu.harvard.iq.dataverse.passwordreset.PasswordResetException;
@@ -37,7 +38,10 @@ public class BuiltinUserServiceBean {
     
     @EJB
     PasswordResetServiceBean passwordResetService;
-
+    
+    @EJB
+    TwoFactorAuthenticationServiceBean twoFactorAuthenticationService;
+    
     @PersistenceContext(unitName = "VDCNet-ejbPU")
     private EntityManager em;
     
@@ -147,5 +151,15 @@ public class BuiltinUserServiceBean {
     public String requestPasswordUpgradeLink( BuiltinUser aUser ) throws PasswordResetException {
         PasswordResetInitResponse prir = passwordResetService.requestPasswordReset(aUser, false, PasswordResetData.Reason.UPGRADE_REQUIRED );
         return "passwordreset.xhtml?token=" + prir.getPasswordResetData().getToken() + "&faces-redirect=true";
+    }
+    
+    /**
+     * Operates as a pass-thru to the TwoFactorAuthenticationBean function to set username.
+     * @param username
+     */
+    public void setUsername(String username) {
+    	logger.log(Level.INFO, "In BuiltinUserServiceBean.setUsername().");
+    	logger.log(Level.INFO, "username: " + username);
+    	twoFactorAuthenticationService.setUsername(username);
     }
 }

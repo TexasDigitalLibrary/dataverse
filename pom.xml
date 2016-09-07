@@ -403,6 +403,12 @@
             <optional>true</optional>
             <type>jar</type>
         </dependency>
+	<!-- Added for 2FA from Duo -->
+        <dependency>
+            <groupId>com.duosecurity</groupId>
+            <artifactId>DuoWeb</artifactId>
+            <version>1.2-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <build>
