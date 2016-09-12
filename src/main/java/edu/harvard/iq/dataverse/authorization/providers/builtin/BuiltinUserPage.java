@@ -453,7 +453,10 @@ public class BuiltinUserPage implements java.io.Serializable {
             userNotificationService.sendNotification(au,
                                                      new Timestamp(new Date().getTime()), 
                                                      UserNotification.Type.CREATEACC, null);
-
+            
+            // Log out user, so they'll need to log back in using 2FA
+            session.setUser(null);
+                  
             // go back to where user came from
             if ("dataverse.xhtml".equals(redirectPage)) {
                 redirectPage = redirectPage + "&alias=" + dataverseService.findRootDataverse().getAlias();
