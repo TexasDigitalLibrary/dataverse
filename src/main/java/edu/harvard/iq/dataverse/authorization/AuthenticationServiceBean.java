@@ -16,6 +16,8 @@ import edu.harvard.iq.dataverse.authorization.providers.builtin.BuiltinUser;
 import edu.harvard.iq.dataverse.authorization.providers.builtin.BuiltinUserServiceBean;
 import edu.harvard.iq.dataverse.authorization.providers.echo.EchoAuthenticationProviderFactory;
 import edu.harvard.iq.dataverse.authorization.providers.shib.ShibAuthenticationProvider;
+import edu.harvard.iq.dataverse.authorization.providers.twofactor.AbstractTwoFactorAuthenticationProvider;
+import edu.harvard.iq.dataverse.authorization.providers.twofactor.TwoFactorAuthenticationProviderFactory;
 import edu.harvard.iq.dataverse.authorization.users.ApiToken;
 import edu.harvard.iq.dataverse.authorization.users.AuthenticatedUser;
 import edu.harvard.iq.dataverse.confirmemail.ConfirmEmailData;
@@ -62,6 +64,12 @@ public class AuthenticationServiceBean {
      */
     final Map<String, AuthenticationProvider> authenticationProviders = new HashMap<>();
     
+    /**
+     * Index of all TwoFactor providers. They also live in {@link #authenticationProviders}.
+     */
+    final Map<String, AbstractTwoFactorAuthenticationProvider> twoFactorAuthenticationProviders = new HashMap<>();
+    
+    
     final Map<String, AuthenticationProviderFactory> providerFactories = new HashMap<>();
     
     @EJB
@@ -92,6 +100,7 @@ public class AuthenticationServiceBean {
         try {
             registerProviderFactory( new BuiltinAuthenticationProviderFactory(builtinUserServiceBean) );
             registerProviderFactory( new EchoAuthenticationProviderFactory() );
+            registerProviderFactory( new TwoFactorAuthenticationProviderFactory(builtinUserServiceBean) );
             /**
              * Register shib provider factory here. Test enable/disable via Admin API, etc.
              */
@@ -154,10 +163,23 @@ public class AuthenticationServiceBean {
         actionLogSvc.log( new ActionLogRecord(ActionLogRecord.ActionType.Auth, "registerProvider")
             .setInfo(aProvider.getId() + ":" + aProvider.getInfo().getTitle()));
         
+        if ( aProvider instanceof AbstractTwoFactorAuthenticationProvider ) {
+            twoFactorAuthenticationProviders.put(aProvider.getId(), (AbstractTwoFactorAuthenticationProvider) aProvider);
+        }
+        
     }
 
+    public AbstractTwoFactorAuthenticationProvider getTwoFactorProvider( String id ) {
+        return twoFactorAuthenticationProviders.get(id);
+    }
+    
+    public Set<AbstractTwoFactorAuthenticationProvider> getTwoFactorProviders() {
+        return new HashSet<>(twoFactorAuthenticationProviders.values());
+    }
+    
     public void deregisterProvider( String id ) {
         authenticationProviders.remove( id );
+        twoFactorAuthenticationProviders.remove( id );
         actionLogSvc.log( new ActionLogRecord(ActionLogRecord.ActionType.Auth, "deregisterProvider")
             .setInfo(id));
 
@@ -310,6 +332,10 @@ public class AuthenticationServiceBean {
         }
     }
 
+    public AuthenticatedUser lookupUser(UserRecordIdentifier id) {
+        return lookupUser(id.repoId, id.userIdInRepo);
+    }
+    
     public AuthenticatedUser lookupUser(String authPrvId, String userPersistentId) {
         TypedQuery<AuthenticatedUserLookup> typedQuery = em.createNamedQuery("AuthenticatedUserLookup.findByAuthPrvID_PersUserId", AuthenticatedUserLookup.class);
         typedQuery.setParameter("authPrvId", authPrvId);

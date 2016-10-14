@@ -1,10 +1,26 @@
 package edu.harvard.iq.dataverse.util;
 
+import java.io.UnsupportedEncodingException;
+import java.security.InvalidKeyException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
+import org.apache.xerces.impl.dv.util.Base64;
 import org.jsoup.Jsoup;
+
+import edu.harvard.iq.dataverse.authorization.providers.twofactor.TwoFactorLoginBackingBean;
 
 /**
  *
@@ -77,4 +93,57 @@ public class StringUtil {
         return cleanTextArray;
     }
 
+    /**
+     * Generates an AES-encrypted version of the string. Resultant string is URL safe.
+     * @param value The value to encrypt.
+     * @param password The password.
+     * @return encrypted string, URL-safe.
+     */
+    public static String encrypt(String value, String password ) {
+        byte[] baseBytes = value.getBytes();
+        try {
+            Cipher aes = Cipher.getInstance("AES");
+            final SecretKeySpec secretKeySpec = generateKeyFromString(password);
+            aes.init(Cipher.ENCRYPT_MODE, secretKeySpec);
+            byte[] encrypted = aes.doFinal(baseBytes);
+            String base64ed = Base64.encode(encrypted);
+            return base64ed.replaceAll("\\+", ".")
+                    .replaceAll("=", "-")
+                    .replaceAll("/", "_");
+            
+        } catch (  InvalidKeyException | NoSuchAlgorithmException | BadPaddingException
+                  | IllegalBlockSizeException | NoSuchPaddingException | UnsupportedEncodingException ex) {
+            Logger.getLogger(TwoFactorLoginBackingBean.class.getName()).log(Level.SEVERE, null, ex);
+            throw new RuntimeException(ex);
+        }
+    }
+    
+    public static String decrypt(String value, String password ) {
+        String base64 = value.replaceAll("\\.", "+")
+                    .replaceAll("-", "=")
+                    .replaceAll("_", "/");
+        
+        byte[] baseBytes = Base64.decode(base64);
+        try {
+            Cipher aes = Cipher.getInstance("AES");
+            aes.init( Cipher.DECRYPT_MODE, generateKeyFromString(password));
+            byte[] decrypted = aes.doFinal(baseBytes);
+            return new String(decrypted);
+            
+        } catch ( InvalidKeyException | NoSuchAlgorithmException | BadPaddingException
+                  | IllegalBlockSizeException | NoSuchPaddingException | UnsupportedEncodingException ex) {
+            Logger.getLogger(TwoFactorLoginBackingBean.class.getName()).log(Level.SEVERE, null, ex);
+            throw new RuntimeException(ex);
+        }
+    }
+    
+    private static SecretKeySpec generateKeyFromString(final String secKey) throws UnsupportedEncodingException, NoSuchAlgorithmException {
+        byte[] key = (secKey).getBytes("UTF-8");
+        MessageDigest sha = MessageDigest.getInstance("SHA-1");
+        key = sha.digest(key);
+        key = Arrays.copyOf(key, 16); // use only first 128 bit
+
+        SecretKeySpec secretKeySpec = new SecretKeySpec(key, "AES");
+        return secretKeySpec;
+    }
 }

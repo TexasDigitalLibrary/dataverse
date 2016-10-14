@@ -148,7 +148,40 @@
                         </div>
                     </div>
                 </div>
-
+				<!-- 2FA login controls -->
+                <ui:fragment rendered="#{twoFactorPage.isTwoFactorProvidersDefined()}">
+                	<div class="row">2FA Authentication!!!</div>
+                    <div class="row">
+						<ui:repeat id="credentialsContainer3" value="#{LoginPage.filledCredentials}" var="fc">
+                        	<div class="form-group text-left">
+                            	<label class="col-sm-4 control-label" for="credValue">
+                                	#{fc.credential.title}
+                                </label>
+                                <div class="col-sm-8">
+                                <h:inputText rendered="#{not fc.credential.secret}" value="#{fc.value}" id="credValue" styleClass="form-control"/>
+                                	<p:message rendered="#{not fc.credential.secret}" for="credValue" display="text"/>
+                                    <h:inputSecret rendered="#{fc.credential.secret}" value="#{fc.value}" id="sCredValue" styleClass="form-control"/>
+                                    <p:message rendered="#{not fc.credential.secret}" for="sCredValue" display="text"/>
+                                </div>
+                            </div>
+                        </ui:repeat>
+                        <div class="form-group">
+                            <div class="col-sm-offset-4 col-sm-9 button-block">
+                            	<p:commandButton id="login" value="#{bundle.login}" update="@all" action="#{LoginPage.login}"/>
+                                <p:button value="#{bundle.cancel}" outcome="/dataverse.xhtml?alias=#{dataverseServiceBean.findRootDataverse().alias}"/>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="col-sm-offset-4 col-sm-9">
+                                <a href="passwordreset.xhtml">
+                                    #{bundle['login.forgot.text']}
+                                </a>
+                            </div>
+                        </div>                       
+                    </div>
+                </ui:fragment>
+                <!-- / 2FA login controls -->
+                
             </ui:define>
         </ui:composition>
     </h:body>

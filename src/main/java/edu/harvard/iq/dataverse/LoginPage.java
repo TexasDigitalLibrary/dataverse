@@ -8,6 +8,7 @@ import edu.harvard.iq.dataverse.authorization.AuthenticationServiceBean;
 import edu.harvard.iq.dataverse.authorization.CredentialsAuthenticationProvider;
 import edu.harvard.iq.dataverse.authorization.exceptions.AuthenticationFailedException;
 import edu.harvard.iq.dataverse.authorization.providers.builtin.BuiltinUserServiceBean;
+import edu.harvard.iq.dataverse.authorization.providers.twofactor.TwoFactorLoginBackingBean;
 import edu.harvard.iq.dataverse.authorization.users.AuthenticatedUser;
 import edu.harvard.iq.dataverse.settings.SettingsServiceBean;
 import edu.harvard.iq.dataverse.util.BundleUtil;
@@ -81,6 +82,9 @@ public class LoginPage implements java.io.Serializable {
     
     @EJB
     AuthenticationServiceBean authSvc;
+    
+    @EJB
+    TwoFactorLoginBackingBean twoFactorService;
 
     @EJB
     SettingsServiceBean settingsService;

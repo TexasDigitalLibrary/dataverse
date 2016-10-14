@@ -12,9 +12,9 @@ import edu.harvard.iq.dataverse.authorization.users.AuthenticatedUser;
  */
 public interface AuthenticationProvider {
     
-    public String getId();
+    String getId();
     
-    public AuthenticationProviderDisplayInfo getInfo();
+    AuthenticationProviderDisplayInfo getInfo();
     
     /**
      * The main method of this interface - provide a consistent user id, within
@@ -22,6 +22,6 @@ public interface AuthenticationProvider {
      * @param request All information needed to decide whether the user can be authenticated.
      * @return response with the result of the authentication process.
      */
-    public AuthenticationResponse authenticate( AuthenticationRequest request );
+    AuthenticationResponse authenticate( AuthenticationRequest request );
 
 }
