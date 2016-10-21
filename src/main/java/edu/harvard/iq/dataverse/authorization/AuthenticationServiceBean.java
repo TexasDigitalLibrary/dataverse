@@ -24,6 +24,8 @@ import edu.harvard.iq.dataverse.confirmemail.ConfirmEmailData;
 import edu.harvard.iq.dataverse.confirmemail.ConfirmEmailServiceBean;
 import edu.harvard.iq.dataverse.passwordreset.PasswordResetData;
 import edu.harvard.iq.dataverse.passwordreset.PasswordResetServiceBean;
+
+import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
@@ -39,6 +41,7 @@ import java.util.logging.Logger;
 import javax.annotation.PostConstruct;
 import javax.ejb.EJB;
 import javax.ejb.Singleton;
+import javax.faces.context.FacesContext;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.NonUniqueResultException;
@@ -98,9 +101,15 @@ public class AuthenticationServiceBean {
         
         // First, set up the factories
         try {
-            registerProviderFactory( new BuiltinAuthenticationProviderFactory(builtinUserServiceBean) );
+            logger.log(Level.INFO, "TDL Registering Provider Factories....");
+            
+        	registerProviderFactory( new BuiltinAuthenticationProviderFactory(builtinUserServiceBean) );
             registerProviderFactory( new EchoAuthenticationProviderFactory() );
+            
+            logger.log(Level.INFO, "TDL Registering 2FA Provider Factories....");
             registerProviderFactory( new TwoFactorAuthenticationProviderFactory(builtinUserServiceBean) );
+            logger.log(Level.INFO, "TDL Finished registering 2FA Provider Factories....");
+            
             /**
              * Register shib provider factory here. Test enable/disable via Admin API, etc.
              */
@@ -115,6 +124,7 @@ public class AuthenticationServiceBean {
                     .getResultList() 
         ) {
             try {
+            	logger.log(Level.INFO, "TDL Loading Provider: " + AuthenticationProviderRow.class.getName());
                 registerProvider( loadProvider(row) );
                 
             } catch ( AuthenticationProviderFactoryNotFoundException e ) {
@@ -133,7 +143,10 @@ public class AuthenticationServiceBean {
             throw new AuthorizationSetupException(
                     "Duplicate alias " + aFactory.getAlias() + " for authentication provider factory.");
         }
+        
+        logger.log(Level.INFO, "TDL Registering Provider Factory: " + aFactory.getAlias());
         providerFactories.put( aFactory.getAlias(), aFactory);
+        
         logger.log( Level.FINE, "Registered Authentication Provider Factory {0} as {1}", 
                 new Object[]{aFactory.getInfo(), aFactory.getAlias()});
     }
@@ -151,6 +164,7 @@ public class AuthenticationServiceBean {
         
         if ( fact == null ) throw new AuthenticationProviderFactoryNotFoundException(aRow.getFactoryAlias());
         
+        logger.log(Level.INFO, "TDL This is where we actually build the authentication provider: " + aRow.getId());
         return fact.buildProvider(aRow);
     }
     
@@ -159,21 +173,27 @@ public class AuthenticationServiceBean {
             throw new AuthorizationSetupException(
                     "Duplicate id " + aProvider.getId() + " for authentication provider.");
         }
+        
+        logger.log(Level.INFO, "TDL Adding Provider to authenticationProviders: " + aProvider.getId());
+        
         authenticationProviders.put( aProvider.getId(), aProvider);
         actionLogSvc.log( new ActionLogRecord(ActionLogRecord.ActionType.Auth, "registerProvider")
             .setInfo(aProvider.getId() + ":" + aProvider.getInfo().getTitle()));
         
         if ( aProvider instanceof AbstractTwoFactorAuthenticationProvider ) {
+        	logger.log(Level.INFO, "TDL Adding 2FA Provider to twoFactorAuthenticationProviders: " + aProvider.getId());
             twoFactorAuthenticationProviders.put(aProvider.getId(), (AbstractTwoFactorAuthenticationProvider) aProvider);
-        }
-        
+            logger.log(Level.INFO, "TDL Count twoFactorAuthenticationProviders: " + twoFactorAuthenticationProviders.size());
+        }        
     }
 
-    public AbstractTwoFactorAuthenticationProvider getTwoFactorProvider( String id ) {
+    public AbstractTwoFactorAuthenticationProvider getTwoFactorAuthenticationProvider( String id ) {
+        logger.log(Level.INFO, "TDL Searching twoFactorAuthenticationProviders for provider: " + id);
         return twoFactorAuthenticationProviders.get(id);
     }
     
-    public Set<AbstractTwoFactorAuthenticationProvider> getTwoFactorProviders() {
+    public Set<AbstractTwoFactorAuthenticationProvider> getTwoFactorAuthenticationProviders() {
+        logger.log(Level.INFO, "TDL Count twoFactorAuthenticationProviders: " + twoFactorAuthenticationProviders.size());
         return new HashSet<>(twoFactorAuthenticationProviders.values());
     }
     
@@ -191,13 +211,35 @@ public class AuthenticationServiceBean {
         return authenticationProviders.keySet();
     }
     
+    public Set<String> getTwoFactorAuthenticationProviderIds() {
+        return twoFactorAuthenticationProviders.keySet();
+    }
+    
     public <T extends AuthenticationProvider> Set<String> getAuthenticationProviderIdsOfType( Class<T> aClass ) {
+    	logger.log(Level.INFO, "TDL in getAuthenticationProviderIdsOfType().");
         Set<String> retVal = new TreeSet<>();
+        
         for ( Map.Entry<String, AuthenticationProvider> p : authenticationProviders.entrySet() ) {
-            if ( aClass.isAssignableFrom( p.getValue().getClass() ) ) {
-                retVal.add( p.getKey() );
-            }
-        }
+           	if ( aClass.isAssignableFrom( p.getValue().getClass() ) ) {
+           		logger.log(Level.INFO, "TDL Adding twoFactorAuthenticationProvider: " + p.getKey());
+           		retVal.add( p.getKey() );
+           	}
+        }    
+       
+        return retVal;
+    }
+    
+    public <T extends AuthenticationProvider> Set<String> getTwoFactorAuthenticationProviderIdsOfType( Class<T> aClass ) {
+    	logger.log(Level.INFO, "TDL in getTwoFactorAuthenticationProviderIdsOfType().");
+        Set<String> retVal = new TreeSet<>();
+
+        for ( Map.Entry<String, AbstractTwoFactorAuthenticationProvider> p : twoFactorAuthenticationProviders.entrySet() ) {
+        	if ( aClass.isAssignableFrom( p.getValue().getClass() ) ) {
+        		logger.log(Level.INFO, "TDL Adding twoFactorAuthenticationProvider: " + p.getKey());
+        		retVal.add( p.getKey() );
+        	}
+    	}
+       
         return retVal;
     }
     
@@ -308,12 +350,27 @@ public class AuthenticationServiceBean {
     }
 
     public AuthenticatedUser authenticate( String authenticationProviderId, AuthenticationRequest req ) throws AuthenticationFailedException {
-        AuthenticationProvider prv = getAuthenticationProvider(authenticationProviderId);
+    	logger.log(Level.INFO, "TDL In authenticate() method.");
+    	
+    	logger.log(Level.INFO, "TDL Getting authenticationProvider: " + authenticationProviderId);
+    	AuthenticationProvider prv = getAuthenticationProvider(authenticationProviderId);
+    	
+    	/*if ( prv == null) {
+    		logger.log(Level.INFO, "TDL Getting twoFactorAuthenticationProvider: " + authenticationProviderId);
+    		prv = getTwoFactorAuthenticationProvider(authenticationProviderId);
+    	}*/
+    	
         if ( prv == null ) throw new IllegalArgumentException("No authentication provider listed under id " + authenticationProviderId );
         
+        logger.log(Level.INFO, "TDL Got authenticationProvider: " + authenticationProviderId);        
+        
+        logger.log(Level.INFO, "TDL Calling authenticate() method of authenticationProvider: " + authenticationProviderId);
         AuthenticationResponse resp = prv.authenticate(req);
+        logger.log(Level.INFO, "TDL Finished calling authenticate() method of authenticationProvider: " + authenticationProviderId);
         
         if ( resp.getStatus() == AuthenticationResponse.Status.SUCCESS ) {
+        	logger.log(Level.INFO, "TDL authenticate() respose was SUCCESS.");
+            
             // yay! see if we already have this user.
             AuthenticatedUser user = lookupUser(authenticationProviderId, resp.getUserId());
 
@@ -327,11 +384,37 @@ public class AuthenticationServiceBean {
                         new UserRecordIdentifier(authenticationProviderId, resp.getUserId()), resp.getUserId(), resp.getUserDisplayInfo(), true )
                 : updateAuthenticatedUser( user, resp.getUserDisplayInfo() );
 
-        } else { 
+        } else {
+        	logger.log(Level.INFO, "TDL authenticate() method failed.");            
             throw new AuthenticationFailedException(resp, "Authentication Failed: " + resp.getMessage());
         }
     }
 
+    public void authenticateTwoFactor( String twoFactorAuthenticationProviderId, AuthenticationRequest req ) throws IOException, AuthenticationFailedException {
+    	logger.log(Level.INFO, "TDL In authenticateTwoFactor() method.");
+    	
+    	logger.log(Level.INFO, "TDL Getting authenticationProvider: " + twoFactorAuthenticationProviderId);
+    	AuthenticationProvider prv = getTwoFactorAuthenticationProvider(twoFactorAuthenticationProviderId);
+    	
+        if ( prv == null ) throw new IllegalArgumentException("No two-factor authentication provider listed under id " + twoFactorAuthenticationProviderId );
+        
+        logger.log(Level.INFO, "TDL Got authenticationProvider: " + twoFactorAuthenticationProviderId);        
+        
+        logger.log(Level.INFO, "TDL Calling authenticate() method of twoFactorAuthenticationProvider: " + twoFactorAuthenticationProviderId);
+        AuthenticationResponse resp = prv.authenticate(req);
+        logger.log(Level.INFO, "TDL Finished calling authenticate() method of twoFactorAuthenticationProvider: " + twoFactorAuthenticationProviderId);
+        
+        if ( resp.getStatus() == AuthenticationResponse.Status.BREAKOUT ) {
+        	logger.log(Level.INFO, "TDL First step of login process was a success. Now redirect to second step.");
+        	
+        	logger.log(Level.INFO, "TDL Redirecting user to: " + resp.getMessage() + "&idpId=" + twoFactorAuthenticationProviderId + "&username=" + resp.getUserId());
+        	FacesContext.getCurrentInstance().getExternalContext().redirect(resp.getMessage() + "&idpId=" + twoFactorAuthenticationProviderId + "&username=" + resp.getUserId());
+        } else {
+        	logger.log(Level.INFO, "TDL Two-factor authenticate() method failed.");
+            throw new AuthenticationFailedException(resp, "2FA Authentication Failed: " + resp.getMessage());
+        }
+    }
+    
     public AuthenticatedUser lookupUser(UserRecordIdentifier id) {
         return lookupUser(id.repoId, id.userIdInRepo);
     }

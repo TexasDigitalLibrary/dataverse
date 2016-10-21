@@ -13,7 +13,6 @@
         <f:metadata>
          	<f:viewParam name="userId" value="#{AuthenticationResponse.userId}"/>
             <f:viewParam name="redirectPage" value="#{LoginPage.redirectPage}"/>
-            <f:viewAction action="#{TwoFactorAuthenticationPage.init}"/>
         </f:metadata>
         <ui:composition template="/dataverse_template.xhtml">
             <ui:param name="pageTitle" value="#{bundle.login} - #{dataverseServiceBean.findRootDataverse().name} #{bundle.dataverse}"/>
@@ -22,7 +21,7 @@
             <ui:param name="loginRedirectPage" value="dataverse.xhtml"/>
             <ui:define name="body">
                 <div id="login-container" class="row">
-					<p>Two Factor Authentication</p>
+					<p>#{TwoFactorPage.getTitle(param['idpId'])}</p>
                     <div class="panel panel-default highlight col-md-12">
                         <div class="panel-body row">
 							<iframe id="duo_iframe" width="620" height="330" frameborder="0"></iframe>
@@ -32,9 +31,11 @@
 
 				<script type="text/javascript" src="#{resource['js/Duo-Web-v2.min.js']}"></script>
 				<script>
-					var host = '#{TwoFactorAuthenticationPage.host}';
-					var sig_request = '#{TwoFactorAuthenticationPage.sig_request}';
-					var post_action = '/twofactorresponse';					
+					var host = "#{TwoFactorPage.getHostname(param['idpId'])}";
+					var sig_request = "#{TwoFactorPage.getToken(param['idpId'], param['username'])}";
+						
+					// var post_action = '/two-factor/response';
+					var post_action = '/two-factor/callback';
 					
 					console.log('In the javascript...');
 					console.log('host: ' + host);
@@ -44,10 +45,10 @@
   					Duo.init({
     					'host': host,
     					'sig_request': sig_request,
-    					'post_action': post_action
+    					'post_action': post_action,
+    					'post_argument': 'code'
   					});
-				</script>
-				
+				</script>			
             </ui:define>
         </ui:composition>
     </h:body>

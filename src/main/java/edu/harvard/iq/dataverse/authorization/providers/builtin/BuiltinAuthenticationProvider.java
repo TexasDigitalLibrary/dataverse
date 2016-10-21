@@ -101,6 +101,7 @@ public class BuiltinAuthenticationProvider implements CredentialsAuthenticationP
             }
         } else {
         	// Set username in 2FA bean
+        	/*
         	logger.log(Level.INFO, "Setting TwoFactorAuthenticationServiceBean.username.");
         	logger.log(Level.INFO, "u.getUserName(): " + u.getUserName());
         	bean.setUsername(u.getUserName());
@@ -108,8 +109,9 @@ public class BuiltinAuthenticationProvider implements CredentialsAuthenticationP
         	logger.log(Level.INFO, "Redirecting to two factor authentication page...");
             String twoFactorAuthenticationPage = "twofactorauthentication.xhtml?faces-redirect=true";    		           
             return AuthenticationResponse.makeBreakout(u.getUserName(), twoFactorAuthenticationPage);
+            */
             
-            // return AuthenticationResponse.makeSuccess(u.getUserName(), u.getDisplayInfo());
+            return AuthenticationResponse.makeSuccess(u.getUserName(), u.getDisplayInfo());
         }
    }
 

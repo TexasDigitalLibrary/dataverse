@@ -3,6 +3,8 @@ package edu.harvard.iq.dataverse.authorization.providers.twofactor;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import edu.harvard.iq.dataverse.authorization.AuthenticationProvider;
@@ -10,7 +12,7 @@ import edu.harvard.iq.dataverse.authorization.exceptions.AuthorizationSetupExcep
 import edu.harvard.iq.dataverse.authorization.providers.AuthenticationProviderFactory;
 import edu.harvard.iq.dataverse.authorization.providers.AuthenticationProviderRow;
 import edu.harvard.iq.dataverse.authorization.providers.builtin.BuiltinUserServiceBean;
-import edu.harvard.iq.dataverse.authorization.providers.twofactor.providers.DuoWebTwoFactorIdp;
+import edu.harvard.iq.dataverse.authorization.providers.twofactor.impl.duo.DuoTwoFactorAP;
 
 /**
  * Creates the built in authentication provider. There is only one, so calling
@@ -20,6 +22,8 @@ import edu.harvard.iq.dataverse.authorization.providers.twofactor.providers.DuoW
  */
 public class TwoFactorAuthenticationProviderFactory implements AuthenticationProviderFactory {
 
+	private static final Logger logger = Logger.getLogger(TwoFactorAuthenticationProviderFactory.class.getName());
+	
     private static interface ProviderBuilder {
         AbstractTwoFactorAuthenticationProvider build(AuthenticationProviderRow aRow, Map<String, String> factoryData);
     }
@@ -27,12 +31,14 @@ public class TwoFactorAuthenticationProviderFactory implements AuthenticationPro
     private final Map<String, ProviderBuilder> builders = new HashMap<>();
     
     public TwoFactorAuthenticationProviderFactory(BuiltinUserServiceBean busBean) {
-        builders.put("duoweb", (row, data) -> readRow(row, new DuoWebTwoFactorIdp(busBean)));
+    	logger.log(Level.INFO, "TDL In the 2FA Provider Factory constructor...");
+        builders.put("duoweb", (row, data) -> readRow(row, new DuoTwoFactorAP(busBean, data.get("clientId"), data.get("clientSecret"), data.get("hostname"))));
+        logger.log(Level.INFO, "Added duoweb.");
     }
 
     @Override
     public String getAlias() {
-        return "TwoFactorAuthentication";
+        return "TwoFactorAuthenticationProvider";
     }
 
     @Override
@@ -74,7 +80,7 @@ public class TwoFactorAuthenticationProviderFactory implements AuthenticationPro
         prv.setId(row.getId());
         prv.setTitle(row.getTitle());
         prv.setSubTitle(row.getSubtitle());
-
+        
         return prv;
     }
     

@@ -14,6 +14,8 @@ import edu.harvard.iq.dataverse.settings.SettingsServiceBean;
 import edu.harvard.iq.dataverse.util.BundleUtil;
 import edu.harvard.iq.dataverse.util.JsfHelper;
 import static edu.harvard.iq.dataverse.util.JsfHelper.JH;
+
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.Iterator;
@@ -84,9 +86,6 @@ public class LoginPage implements java.io.Serializable {
     AuthenticationServiceBean authSvc;
     
     @EJB
-    TwoFactorLoginBackingBean twoFactorService;
-
-    @EJB
     SettingsServiceBean settingsService;
     
     @Inject
@@ -99,10 +98,17 @@ public class LoginPage implements java.io.Serializable {
     private String redirectPage = "dataverse.xhtml";
     
     public void init() {
+    	logger.log(Level.INFO, "TDL Init() function of LoginPage.");
         Iterator<String> credentialsIterator = authSvc.getAuthenticationProviderIdsOfType( CredentialsAuthenticationProvider.class ).iterator();
         if ( credentialsIterator.hasNext() ) {
             setCredentialsAuthProviderId(credentialsIterator.next());
         }
+        
+        credentialsIterator = authSvc.getTwoFactorAuthenticationProviderIdsOfType( CredentialsAuthenticationProvider.class ).iterator();
+        if ( credentialsIterator.hasNext() ) {
+            setCredentialsAuthProviderId(credentialsIterator.next());
+        }
+        
         resetFilledCredentials(null);
     }
     
@@ -119,14 +125,14 @@ public class LoginPage implements java.io.Serializable {
         return infos;
     }
     
-    public List<AuthenticationProviderDisplayInfo> listAuthenticationProviders() {
+    /*public List<AuthenticationProviderDisplayInfo> listAuthenticationProviders() {
         List<AuthenticationProviderDisplayInfo> infos = new LinkedList<>();
         for ( String id : authSvc.getAuthenticationProviderIds() ) {
             AuthenticationProvider authenticationProvider = authSvc.getAuthenticationProvider(id);
             infos.add( authenticationProvider.getInfo());
         }
         return infos;
-    }
+    }*/
    
     public CredentialsAuthenticationProvider selectedCredentialsProvider() {
         return (CredentialsAuthenticationProvider) authSvc.getAuthenticationProvider(getCredentialsAuthProviderId());
@@ -137,7 +143,8 @@ public class LoginPage implements java.io.Serializable {
     }
 
     public String login() {
-        
+    	logger.log(Level.INFO, "TDL In login() of LoginPage.");
+    	
         AuthenticationRequest authReq = new AuthenticationRequest();
         List<FilledCredential> filledCredentialsList = getFilledCredentials();
         if ( filledCredentialsList == null ) {
@@ -160,7 +167,7 @@ public class LoginPage implements java.io.Serializable {
                 redirectPage = redirectPage + "&alias=" + dataverseService.findRootDataverse().getAlias();
             }
             
-            try {            
+            try {
                 redirectPage = URLDecoder.decode(redirectPage, "UTF-8");
             } catch (UnsupportedEncodingException ex) {
                 Logger.getLogger(LoginPage.class.getName()).log(Level.SEVERE, null, ex);
@@ -197,6 +204,61 @@ public class LoginPage implements java.io.Serializable {
         
     }
 
+    public void loginTwoFactor() {
+    	logger.log(Level.INFO, "TDL In loginTwoFactor() of LoginPage.");
+    	
+        AuthenticationRequest authReq = new AuthenticationRequest();
+        List<FilledCredential> filledCredentialsList = getFilledCredentials();
+        if ( filledCredentialsList == null ) {
+            logger.info("Credential list is null!");           
+        }
+        for ( FilledCredential fc : filledCredentialsList ) {
+            if(fc.getValue()==null || fc.getValue().isEmpty()){
+                JH.addMessage(FacesMessage.SEVERITY_ERROR, "Please enter a "+fc.getCredential().getTitle());
+            }
+            authReq.putCredential(fc.getCredential().getTitle(), fc.getValue());
+        }
+        authReq.setIpAddress( dvRequestService.getDataverseRequest().getSourceAddress() );
+        
+        try {
+            authSvc.authenticateTwoFactor(credentialsAuthProviderId, authReq);
+            logger.log(Level.INFO, "TDL Still in loginTwoFactor() of LoginPage.");
+            
+        } catch (AuthenticationFailedException ex) {
+            AuthenticationResponse response = ex.getResponse();
+            
+        } catch (IOException ex) {
+        	logger.log(Level.INFO, "TDL caught IOException: " + ex.getMessage());
+        }        
+    }
+
+    public void loginTwoFactor(String credentialsAuthProviderId) {
+    	logger.log(Level.INFO, "TDL In loginTwoFactor(credentialsAuthProviderId) of LoginPage.");
+    	
+        AuthenticationRequest authReq = new AuthenticationRequest();
+        List<FilledCredential> filledCredentialsList = getFilledCredentials();
+        if ( filledCredentialsList == null ) {
+            logger.info("Credential list is null!");           
+        }
+        for ( FilledCredential fc : filledCredentialsList ) {
+            if(fc.getValue()==null || fc.getValue().isEmpty()){
+                JH.addMessage(FacesMessage.SEVERITY_ERROR, "Please enter a "+fc.getCredential().getTitle());
+            }
+            authReq.putCredential(fc.getCredential().getTitle(), fc.getValue());
+        }
+        authReq.setIpAddress( dvRequestService.getDataverseRequest().getSourceAddress() );
+        
+        try {
+            authSvc.authenticateTwoFactor(credentialsAuthProviderId, authReq);
+            logger.log(Level.INFO, "TDL Still in loginTwoFactor(credentialsAuthProviderId) of LoginPage.");            
+        } catch (AuthenticationFailedException ex) {
+            AuthenticationResponse response = ex.getResponse();
+            
+        } catch (IOException ex) {
+        	logger.log(Level.INFO, "TDL caught IOException: " + ex.getMessage());
+        }        
+    }
+    
     public String getCredentialsAuthProviderId() {
         return credentialsAuthProviderId;
     }

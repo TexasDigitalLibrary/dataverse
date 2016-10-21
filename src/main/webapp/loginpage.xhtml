@@ -149,36 +149,42 @@
                     </div>
                 </div>
 				<!-- 2FA login controls -->
-                <ui:fragment rendered="#{twoFactorPage.isTwoFactorProvidersDefined()}">
-                	<div class="row">2FA Authentication!!!</div>
-                    <div class="row">
-						<ui:repeat id="credentialsContainer3" value="#{LoginPage.filledCredentials}" var="fc">
-                        	<div class="form-group text-left">
-                            	<label class="col-sm-4 control-label" for="credValue">
-                                	#{fc.credential.title}
-                                </label>
-                                <div class="col-sm-8">
-                                <h:inputText rendered="#{not fc.credential.secret}" value="#{fc.value}" id="credValue" styleClass="form-control"/>
-                                	<p:message rendered="#{not fc.credential.secret}" for="credValue" display="text"/>
-                                    <h:inputSecret rendered="#{fc.credential.secret}" value="#{fc.value}" id="sCredValue" styleClass="form-control"/>
-                                    <p:message rendered="#{not fc.credential.secret}" for="sCredValue" display="text"/>
+                <ui:fragment rendered="#{TwoFactorPage.isTwoFactorProvidersDefined()}">
+                	<ui:repeat value="#{TwoFactorPage.providers}" var="p">
+                		<div class="panel panel-default highlight col-md-6">                		
+                        	<div class="panel-body row">2FA Authentication</div>
+                   			<h:form id="twoFactorLoginForm" styleClass="form-horizontal">
+                   				<h:inputHidden id="twoFactorAuthenticationProvider" value="#{p.id}" />
+                                <p:focus context="twoFactorLoginForm"/>
+                                <ui:repeat id="credentialsContainer2" value="#{LoginPage.filledCredentials}" var="fc">
+                                  	<div class="form-group text-left">
+                                       	<label class="col-sm-4 control-label" for="credValue">
+                                           	#{fc.credential.title}
+                                       	</label>
+                                       	<div class="col-sm-8">
+                                           	<h:inputText rendered="#{not fc.credential.secret}" value="#{fc.value}" id="credValue" styleClass="form-control"/>
+                                           	<p:message rendered="#{not fc.credential.secret}" for="credValue" display="text"/>
+                                           	<h:inputSecret rendered="#{fc.credential.secret}" value="#{fc.value}" id="sCredValue" styleClass="form-control"/>
+                                           	<p:message rendered="#{not fc.credential.secret}" for="sCredValue" display="text"/>
+                                       	</div>
+                                   	</div>
+                                </ui:repeat>
+                                <div class="form-group">
+                                   	<div class="col-sm-offset-4 col-sm-9 button-block">
+                                       	<p:commandButton id="login" value="#{bundle.login}" update="@all" action="#{LoginPage.loginTwoFactor(p.id)}"/>
+                                       	<p:button value="#{bundle.cancel}" outcome="/dataverse.xhtml?alias=#{dataverseServiceBean.findRootDataverse().alias}"/>
+                                   	</div>
                                 </div>
-                            </div>
-                        </ui:repeat>
-                        <div class="form-group">
-                            <div class="col-sm-offset-4 col-sm-9 button-block">
-                            	<p:commandButton id="login" value="#{bundle.login}" update="@all" action="#{LoginPage.login}"/>
-                                <p:button value="#{bundle.cancel}" outcome="/dataverse.xhtml?alias=#{dataverseServiceBean.findRootDataverse().alias}"/>
-                            </div>
+                                <div class="form-group">
+                                   	<div class="col-sm-offset-4 col-sm-9">
+                                       	<a href="passwordreset.xhtml">
+                                       		#{bundle['login.forgot.text']}
+                                       	</a>
+                                   	</div>
+                                </div>
+                            </h:form>
                         </div>
-                        <div class="form-group">
-                            <div class="col-sm-offset-4 col-sm-9">
-                                <a href="passwordreset.xhtml">
-                                    #{bundle['login.forgot.text']}
-                                </a>
-                            </div>
-                        </div>                       
-                    </div>
+                	</ui:repeat>
                 </ui:fragment>
                 <!-- / 2FA login controls -->
                 
