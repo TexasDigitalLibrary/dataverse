@@ -214,6 +214,10 @@ public class Dataset extends DvObjectContainer {
             if (testDsv.isReleased()) {
                 return false;
             }
+            //Also check for draft version
+            if (testDsv.isDraft()) {
+                return false;
+            }
             if (testDsv.isDeaccessioned()) {
                 hasDeaccessionedVersions = true;
             }
@@ -282,6 +286,7 @@ public class Dataset extends DvObjectContainer {
                 newFm.setCategories(fm.getCategories());
                 newFm.setDescription(fm.getDescription());
                 newFm.setLabel(fm.getLabel());
+                newFm.setDirectoryLabel(fm.getDirectoryLabel());
                 newFm.setRestricted(fm.isRestricted());
                 newFm.setDataFile(fm.getDataFile());
                 newFm.setDatasetVersion(dsv);
