@@ -25,6 +25,7 @@ import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -271,6 +272,18 @@ public class TwoFactorLoginBackingBean implements Serializable {
 		final String idpId = req.getParameter("provider");
 		logger.log(Level.INFO, "2fa provider: " + idpId);
 			
+		final String foo = req.getParameter("foo");
+		logger.log(Level.INFO, "2fa foo: " + foo);
+		
+		logger.log(Level.INFO, "2fa req object: " + req.toString());
+		
+		Enumeration pnames = req.getParameterNames();
+		while (pnames.hasMoreElements()) {
+			String parameterName = pnames.nextElement().toString();
+			logger.log(Level.INFO,  "parameter name: " + parameterName);
+			logger.log(Level.INFO,  "parameter value: " + req.getParameter(parameterName));			
+		}
+		
         if ((code != null) && (!code.trim().isEmpty())) {
         	String authenticatedUsername = new String();
         	
