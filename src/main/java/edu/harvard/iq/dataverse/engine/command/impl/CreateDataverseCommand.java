@@ -119,7 +119,7 @@ public class CreateDataverseCommand extends AbstractCommand<Dataverse> {
                         String[] comps = identifier.split(Group.PATH_SEPARATOR, 2);
                         if (ctxt.explicitGroups().getProvider().getGroupProviderAlias().equals(comps[0])) {
                             ctxt.roles().save(new RoleAssignment(adminRole,
-                                    ctxt.explicitGroups().getProvider().get(comps[2]), managedDv, privateUrlToken));
+                                    ctxt.explicitGroups().getProvider().get(comps[1]), managedDv, privateUrlToken));
                         }
                     }
                 }
