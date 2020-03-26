@@ -242,6 +242,8 @@ public class DatasetPage implements java.io.Serializable {
     @Inject DataverseHeaderFragment dataverseHeaderFragment;
 
     private Dataset dataset = new Dataset();
+    
+    private Long id = null;    
     private EditMode editMode;
     private boolean bulkFileDeleteInProgress = false;
 
@@ -1446,6 +1448,9 @@ public class DatasetPage implements java.io.Serializable {
     public DatasetVersion getWorkingVersion() {
         return workingVersion;
     }
+    
+    public Long getId() { return this.id; }
+    public void setId(Long id) { this.id = id; }    
 
     public EditMode getEditMode() {
         return editMode;
@@ -1769,7 +1774,6 @@ public class DatasetPage implements java.io.Serializable {
     private String init(boolean initFull) {
   
         //System.out.println("_YE_OLDE_QUERY_COUNTER_");  // for debug purposes
-        this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSize();
         setDataverseSiteUrl(systemConfig.getDataverseSiteUrl());
 
         guestbookResponse = new GuestbookResponse();
@@ -1799,9 +1803,9 @@ public class DatasetPage implements java.io.Serializable {
                 this.workingVersion = retrieveDatasetVersionResponse.getDatasetVersion();
                 logger.fine("retrieved version: id: " + workingVersion.getId() + ", state: " + this.workingVersion.getVersionState());
 
-            } else if (dataset.getId() != null) {
+            } else if (this.getId() != null) {
                 // Set Working Version and Dataset by Datasaet Id and Version
-                dataset = datasetService.find(dataset.getId());
+                dataset = datasetService.find(this.getId());
                 if (dataset == null) {
                     logger.warning("No such dataset: "+dataset);
                     return permissionsWrapper.notFound();
@@ -1816,7 +1820,9 @@ public class DatasetPage implements java.io.Serializable {
                 // Set Working Version and Dataset by DatasaetVersion Id
                 //retrieveDatasetVersionResponse = datasetVersionService.retrieveDatasetVersionByVersionId(versionId);
 
-            } 
+            }
+            this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSizeForStore(dataset.getOwner().getEffectiveStorageDriverId());
+
 
             if (retrieveDatasetVersionResponse == null) {
                 return permissionsWrapper.notFound();
@@ -2974,16 +2980,6 @@ public class DatasetPage implements java.io.Serializable {
 
     public void setLinkingDataverseErrorMessage(String linkingDataverseErrorMessage) {
         this.linkingDataverseErrorMessage = linkingDataverseErrorMessage;
-    }
-    
-    UIInput selectedLinkingDataverseMenu;
-    
-    public UIInput getSelectedDataverseMenu() {
-        return selectedLinkingDataverseMenu;
-    }
-
-    public void setSelectedDataverseMenu(UIInput selectedDataverseMenu) {
-        this.selectedLinkingDataverseMenu = selectedDataverseMenu;
     }
     
     private Boolean saveLink(Dataverse dataverse){
@@ -5258,6 +5254,11 @@ public class DatasetPage implements java.io.Serializable {
         User user = session.getUser();
         if (user instanceof AuthenticatedUser) {
             apiToken = authService.findApiTokenByUser((AuthenticatedUser) user);
+        } else if (user instanceof PrivateUrlUser) {
+            PrivateUrlUser privateUrlUser = (PrivateUrlUser) user;
+            PrivateUrl privUrl = privateUrlService.getPrivateUrlFromDatasetId(privateUrlUser.getDatasetId());
+            apiToken = new ApiToken();
+            apiToken.setTokenString(privUrl.getToken());
         }
         ExternalToolHandler externalToolHandler = new ExternalToolHandler(externalTool, dataset, apiToken, session.getLocaleCode());
         String toolUrl = externalToolHandler.getToolUrlWithQueryParams();

@@ -7,6 +7,7 @@ import edu.harvard.iq.dataverse.authorization.Permission;
 import edu.harvard.iq.dataverse.authorization.users.AuthenticatedUser;
 import edu.harvard.iq.dataverse.branding.BrandingUtil;
 import edu.harvard.iq.dataverse.datasetutility.AddReplaceFileHelper;
+import edu.harvard.iq.dataverse.datasetutility.FileSizeChecker;
 import edu.harvard.iq.dataverse.datasetutility.FileReplaceException;
 import edu.harvard.iq.dataverse.datasetutility.FileReplacePageHelper;
 import edu.harvard.iq.dataverse.dataaccess.DataAccess;
@@ -18,6 +19,7 @@ import edu.harvard.iq.dataverse.datacapturemodule.DataCaptureModuleUtil;
 import edu.harvard.iq.dataverse.datacapturemodule.ScriptRequestResponse;
 import edu.harvard.iq.dataverse.dataset.DatasetThumbnail;
 import edu.harvard.iq.dataverse.engine.command.Command;
+import edu.harvard.iq.dataverse.engine.command.CommandContext;
 import edu.harvard.iq.dataverse.engine.command.exception.CommandException;
 import edu.harvard.iq.dataverse.engine.command.exception.IllegalCommandException;
 import edu.harvard.iq.dataverse.engine.command.impl.DeleteDataFileCommand;
@@ -36,6 +38,8 @@ import edu.harvard.iq.dataverse.util.SystemConfig;
 import edu.harvard.iq.dataverse.util.BundleUtil;
 import edu.harvard.iq.dataverse.util.EjbUtil;
 import static edu.harvard.iq.dataverse.util.JsfHelper.JH;
+import static edu.harvard.iq.dataverse.util.StringUtil.isEmpty;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -310,6 +314,10 @@ public class EditDatafilesPage implements java.io.Serializable {
         return this.maxFileUploadSizeInBytes;
     }
     
+    public String getHumanMaxFileUploadSizeInBytes() {
+        return FileSizeChecker.bytesToHumanReadable(this.maxFileUploadSizeInBytes);
+    }
+    
     public boolean isUnlimitedUploadFileSize() {
         
         return this.maxFileUploadSizeInBytes == null;
@@ -355,7 +363,7 @@ public class EditDatafilesPage implements java.io.Serializable {
     }
     
     public boolean directUploadEnabled() {
-    	return Boolean.getBoolean("dataverse.files." + this.dataset.getDataverseContext().getStorageDriverId() + ".upload-redirect");
+    	return Boolean.getBoolean("dataverse.files." + this.dataset.getDataverseContext().getEffectiveStorageDriverId() + ".upload-redirect");
     }
     
     public void reset() {
@@ -447,16 +455,16 @@ public class EditDatafilesPage implements java.io.Serializable {
         if (version == null) {
             return permissionsWrapper.notFound();
         }
-        
-        this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSize();
-        this.multipleUploadFilesLimit = systemConfig.getMultipleUploadFilesLimit();
-        
+
         workingVersion = version; 
         dataset = version.getDataset();
         mode = FileEditMode.CREATE;
         newFiles = newFilesList;
         uploadedFiles = new ArrayList<>();
         selectedFiles = selectedFileMetadatasList;
+        
+        this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSizeForStore(dataset.getOwner().getEffectiveStorageDriverId());
+        this.multipleUploadFilesLimit = systemConfig.getMultipleUploadFilesLimit();
         
         logger.fine("done");
         
@@ -469,9 +477,6 @@ public class EditDatafilesPage implements java.io.Serializable {
         
         newFiles = new ArrayList<>();
         uploadedFiles = new ArrayList<>(); 
-        
-        this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSize();
-        this.multipleUploadFilesLimit = systemConfig.getMultipleUploadFilesLimit();
         
         if (dataset.getId() != null){
             // Set Working Version and Dataset by Datasaet Id and Version
@@ -487,7 +492,10 @@ public class EditDatafilesPage implements java.io.Serializable {
             // that the dataset id is mandatory... But 404 will do for now.
             return permissionsWrapper.notFound();
         }
-                
+
+        this.maxFileUploadSizeInBytes = systemConfig.getMaxFileUploadSizeForStore(dataset.getOwner().getEffectiveStorageDriverId());
+        this.multipleUploadFilesLimit = systemConfig.getMultipleUploadFilesLimit();
+                       
         workingVersion = dataset.getEditVersion();
         clone = workingVersion.cloneDatasetVersion();
         if (workingVersion == null || !workingVersion.isDraft()) {
@@ -1748,6 +1756,14 @@ public class EditDatafilesPage implements java.io.Serializable {
     }
 
     public void requestDirectUploadUrl() {
+        
+    	//Need to assign an identifier at this point if direct upload is used.
+        if ( isEmpty(dataset.getIdentifier()) ) {
+        	CommandContext ctxt = commandEngine.getContext();
+        	GlobalIdServiceBean idServiceBean = GlobalIdServiceBean.getBean(ctxt);
+            dataset.setIdentifier(ctxt.datasets().generateDatasetIdentifier(dataset, idServiceBean));
+        }
+        
         S3AccessIO<?> s3io = FileUtil.getS3AccessForDirectUpload(dataset);
         if(s3io == null) {
         	FacesContext.getCurrentInstance().addMessage(uploadComponentId, new FacesMessage(FacesMessage.SEVERITY_ERROR, BundleUtil.getStringFromBundle("dataset.file.uploadWarning"), "Direct upload not supported for this dataset"));
@@ -1857,7 +1873,8 @@ public class EditDatafilesPage implements java.io.Serializable {
         
         if (fileReplacePageHelper.handleNativeFileUpload(inputStream,null,
                                     fileName,
-                                    contentType
+                                    contentType, 
+                                    null
                                 )){
             saveEnabled = true;
 
@@ -1916,11 +1933,13 @@ public class EditDatafilesPage implements java.io.Serializable {
     
     private void handleReplaceFileUpload(String fullStorageLocation, 
     		String fileName, 
-    		String contentType){
+    		String contentType, 
+    		String checkSum){
 
     	fileReplacePageHelper.resetReplaceFileHelper();
     	saveEnabled = false;
-    	if (fileReplacePageHelper.handleNativeFileUpload(null, fullStorageLocation, fileName, contentType)){
+    	String storageIdentifier = DataAccess.getStorarageIdFromLocation(fullStorageLocation);
+    	if (fileReplacePageHelper.handleNativeFileUpload(null, storageIdentifier, fileName, contentType, checkSum)){
     		saveEnabled = true;
 
     		/**
@@ -2053,6 +2072,16 @@ public class EditDatafilesPage implements java.io.Serializable {
     		//get file size
     		long fileSize = sio.getSize();
 
+			if(StringUtils.isEmpty(contentType)) {
+				contentType = FileUtil.MIME_TYPE_UNDETERMINED_DEFAULT;
+			}
+			
+			if(DataFile.ChecksumType.fromString(checksumType) != DataFile.ChecksumType.MD5 ) {
+				String warningMessage = "Non-MD5 checksums not yet supported in external uploads";
+				localWarningMessage = warningMessage;
+				//ToDo - methods like handleReplaceFileUpload and classes like OptionalFileParams will need to track the algorithm in addition to the value to enable this
+			}
+			
     		/* ----------------------------
                 Check file size
                 - Max size NOT specified in db: default is unlimited
@@ -2067,7 +2096,7 @@ public class EditDatafilesPage implements java.io.Serializable {
     			// Is this a FileReplaceOperation?  If so, then diverge!
     			// -----------------------------------------------------------
     			if (this.isFileReplaceOperation()){
-    				this.handleReplaceFileUpload(storageLocation, fileName, FileUtil.MIME_TYPE_UNDETERMINED_DEFAULT);
+    				this.handleReplaceFileUpload(storageLocation, fileName, contentType, checksumValue);
     				this.setFileMetadataSelectedForTagsPopup(fileReplacePageHelper.getNewFileMetadatasBeforeSave().get(0));
     				return;
     			}
@@ -2083,13 +2112,8 @@ public class EditDatafilesPage implements java.io.Serializable {
     				// for example, multiple files can be extracted from an uncompressed
     				// zip file.
     				//datafiles = ingestService.createDataFiles(workingVersion, dropBoxStream, fileName, "application/octet-stream");
-    				if(StringUtils.isEmpty(contentType)) {
-    					contentType = "application/octet-stream";
-    				}
-    				if(DataFile.ChecksumType.fromString(checksumType) != DataFile.ChecksumType.MD5 ) {
-    					String warningMessage = "Non-MD5 checksums not yet supported in external uploads";
-    					localWarningMessage = warningMessage;
-    				}
+
+
     				datafiles = FileUtil.createDataFiles(workingVersion, null, fileName, contentType, fullStorageIdentifier, checksumValue, systemConfig);
     			} catch (IOException ex) {
     				logger.log(Level.SEVERE, "Error during ingest of file {0}", new Object[]{fileName});
@@ -2928,7 +2952,7 @@ public class EditDatafilesPage implements java.io.Serializable {
     	// ToDo - rsync was written before multiple store support and currently is hardcoded to use the "s3" store. 
     	// When those restrictions are lifted/rsync can be configured per store, this test should check that setting
     	// instead of testing for the 's3" store.
-    	return settingsWrapper.isRsyncUpload() && dataset.getDataverseContext().getStorageDriverId().equals("s3");
+    	return settingsWrapper.isRsyncUpload() && dataset.getDataverseContext().getEffectiveStorageDriverId().equals("s3");
     }
     
     

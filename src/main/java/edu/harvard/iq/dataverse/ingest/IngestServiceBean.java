@@ -44,6 +44,7 @@ import edu.harvard.iq.dataverse.dataaccess.DataAccess;
 import edu.harvard.iq.dataverse.dataaccess.DataAccessOption;
 import edu.harvard.iq.dataverse.dataaccess.StorageIO;
 import edu.harvard.iq.dataverse.dataaccess.ImageThumbConverter;
+import edu.harvard.iq.dataverse.dataaccess.S3AccessIO;
 import edu.harvard.iq.dataverse.dataaccess.TabularSubsetGenerator;
 import edu.harvard.iq.dataverse.datavariable.SummaryStatistic;
 import edu.harvard.iq.dataverse.datavariable.DataVariable;
@@ -180,11 +181,12 @@ public class IngestServiceBean {
 				String driverType = DataAccess.getDriverType(storageInfo[0]);
 				String storageLocation = storageInfo[1];
 				String tempFileLocation = null;
-				if (driverType.equals("tmp")|| driverType.contentEquals("file")) {  //"file" is the default if no prefix
+				Path tempLocationPath = null;
+				if (driverType.equals("tmp")) {  //"tmp" is the default if no prefix or the "tmp://" driver
 					tempFileLocation = FileUtil.getFilesTempDirectory() + "/" + storageLocation;
 
 					// Try to save the file in its permanent location:
-					Path tempLocationPath = Paths.get(FileUtil.getFilesTempDirectory() + "/" + storageLocation);
+					tempLocationPath = Paths.get(tempFileLocation);
 					WritableByteChannel writeChannel = null;
 					FileChannel readChannel = null;
 
@@ -230,8 +232,7 @@ public class IngestServiceBean {
 						logger.fine("Success: permanently saved file " + dataFile.getFileMetadata().getLabel());
 
 					} catch (IOException ioex) {
-						logger.warning("Failed to save the file, storage id " + dataFile.getStorageIdentifier() + " ("
-								+ ioex.getMessage() + ")");
+                    logger.warning("Failed to save the file, storage id " + dataFile.getStorageIdentifier() + " (" + ioex.getMessage() + ")");
 					} finally {
 						if (readChannel != null) {
 							try {
@@ -247,8 +248,7 @@ public class IngestServiceBean {
 						}
 					}
 
-					// Since we may have already spent some CPU cycles scaling down image
-					// thumbnails,
+                    // Since we may have already spent some CPU cycles scaling down image thumbnails, 
 					// we may as well save them, by moving these generated images to the permanent
 					// dataset directory. We should also remember to delete any such files in the
 					// temp directory:
@@ -290,22 +290,11 @@ public class IngestServiceBean {
 						}
 					}
 
-					// ... and let's delete the main temp file:
-					try {
-						logger.fine("Will attempt to delete the temp file " + tempLocationPath.toString());
-						Files.delete(tempLocationPath);
-					} catch (IOException ex) {
-						// (non-fatal - it's just a temp file.)
-						logger.warning("Failed to delete temp file " + tempLocationPath.toString());
-					}
-
 					if (unattached) {
 						dataFile.setOwner(null);
 					}
 					// Any necessary post-processing:
 					// performPostProcessingTasks(dataFile);
-
-
 				} else {
 					try {
 						StorageIO<DvObject> dataAccess = DataAccess.getStorageIO(dataFile);
@@ -313,14 +302,15 @@ public class IngestServiceBean {
 						dataAccess.open(DataAccessOption.READ_ACCESS);
 						//set file size
 						dataFile.setFilesize(dataAccess.getSize());
+						if(dataAccess instanceof S3AccessIO) {
+							  ((S3AccessIO<DvObject>)dataAccess).removeTempTag();
+						}
 					} catch (IOException ioex) {
 						logger.warning("Failed to get file size, storage id " + dataFile.getStorageIdentifier() + " ("
 								+ ioex.getMessage() + ")");
 					}
 					savedSuccess = true;
-					logger.info("unattached: " + unattached);
-						dataFile.setOwner(null);
-					
+					dataFile.setOwner(null);
 				}
 
 				logger.fine("Done! Finished saving new files in permanent storage and adding them to the dataset.");
@@ -364,7 +354,21 @@ public class IngestServiceBean {
 						} else {
 							logger.fine("Failed to extract indexable metadata from file " + fileName);
 						}
-					}
+					} else if (FileUtil.MIME_TYPE_INGESTED_FILE.equals(dataFile.getContentType())) {
+                        // Make sure no *uningested* tab-delimited files are saved with the type "text/tab-separated-values"!
+                        // "text/tsv" should be used instead: 
+                        dataFile.setContentType(FileUtil.MIME_TYPE_TSV);
+                    }
+				}
+				// ... and let's delete the main temp file if it exists:
+				if(tempLocationPath!=null) {
+    				try {
+	    				logger.fine("Will attempt to delete the temp file " + tempLocationPath.toString());
+			    		Files.delete(tempLocationPath);
+				    } catch (IOException ex) {
+					    // (non-fatal - it's just a temp file.)
+    					logger.warning("Failed to delete temp file " + tempLocationPath.toString());
+	    			}				
 				}
 				if (savedSuccess) {
 					// temp dbug line
@@ -465,12 +469,12 @@ public class IngestServiceBean {
 
         List<DataFile> scheduledFiles = new ArrayList<>();
         for (DataFile dataFile : dataFiles) {
+            // refresh the copy of the DataFile:
+            dataFile = fileService.find(dataFile.getId());
+            
             if (dataFile.isIngestScheduled()) {
 
-                // refresh the copy of the DataFile:
-                dataFile = fileService.find(dataFile.getId());
-
-                long ingestSizeLimit = -1;
+                long ingestSizeLimit = 0;
                 try {
                     ingestSizeLimit = systemConfig.getTabularIngestSizeLimit(getTabDataReaderByMimeType(dataFile.getContentType()).getFormatName());
                 } catch (IOException ioex) {
@@ -773,6 +777,15 @@ public class IngestServiceBean {
         boolean ingestSuccessful = false;
         boolean forceTypeCheck = false;
         
+        // Never attempt to ingest a file that's already ingested!
+        if (dataFile.isTabularData()) {
+            FileUtil.createIngestFailureReport(dataFile, "Repeated ingest attempted on a tabular data file! (status flag was: "+dataFile.getIngestStatus());
+            dataFile.setIngestDone();
+            dataFile = fileService.save(dataFile);
+            logger.warning("Repeated ingest attempted on a tabular data file (datafile id "+datafile_id+"); exiting.");
+            return false;
+        }
+        
         IngestRequest ingestRequest = dataFile.getIngestRequest();
         if (ingestRequest != null) {
             forceTypeCheck = ingestRequest.isForceTypeCheck();
@@ -953,7 +966,7 @@ public class IngestServiceBean {
                             throw new EJBException("Deliberate database save failure");
                         }
                      */
-                    dataFile = fileService.save(dataFile);
+                    dataFile = fileService.saveInTransaction(dataFile);
                     databaseSaveSuccessful = true;
 
                     logger.fine("Ingest (" + dataFile.getFileMetadata().getLabel() + ".");
@@ -980,7 +993,7 @@ public class IngestServiceBean {
                 }
 
                 if (!databaseSaveSuccessful) {
-                    logger.warning("Ingest failure (!databaseSaveSuccessful).");
+                    logger.warning("Ingest failure (failed to save the tabular data in the database; file left intact as uploaded).");
                     return false;
                 }
 
@@ -1003,6 +1016,9 @@ public class IngestServiceBean {
                     dataAccess.savePath(Paths.get(tabFile.getAbsolutePath()));
                     // Reset the file size: 
                     dataFile.setFilesize(dataAccess.getSize());
+                    
+                    dataFile = fileService.save(dataFile);
+                    logger.fine("saved data file after updating the size");
 
                     // delete the temp tab-file:
                     tabFile.delete();
@@ -1110,7 +1126,7 @@ public class IngestServiceBean {
             ingestPlugin = new RDATAFileReader(new RDATAFileReaderSpi());
         } else if (mimeType.equals(FileUtil.MIME_TYPE_CSV) || mimeType.equals(FileUtil.MIME_TYPE_CSV_ALT)) {
             ingestPlugin = new CSVFileReader(new CSVFileReaderSpi(), ',');
-        } else if (mimeType.equals(FileUtil.MIME_TYPE_TSV) || mimeType.equals(FileUtil.MIME_TYPE_TSV_ALT)) {
+        } else if (mimeType.equals(FileUtil.MIME_TYPE_TSV) /*|| mimeType.equals(FileUtil.MIME_TYPE_TSV_ALT)*/) {
             ingestPlugin = new CSVFileReader(new CSVFileReaderSpi(), '\t');
         }  else if (mimeType.equals(FileUtil.MIME_TYPE_XLSX)) {
             ingestPlugin = new XLSXFileReader(new XLSXFileReaderSpi());

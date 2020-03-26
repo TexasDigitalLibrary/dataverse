@@ -11,6 +11,8 @@ Once you have finished securing and configuring your Dataverse installation, you
 .. contents:: |toctitle|
   :local:
 
+.. _securing-your-installation:
+
 Securing Your Installation
 --------------------------
 
@@ -49,17 +51,18 @@ Out of the box, Dataverse will list email addresses of the contacts for datasets
 
 Additional Recommendations
 ++++++++++++++++++++++++++
-Run Glassfish as a User Other Than Root
-+++++++++++++++++++++++++++++++++++++++
 
-See the Glassfish section of :doc:`prerequisites` for details and init scripts for running Glassfish as non-root.
+Run Glassfish as a User Other Than Root
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+See the :ref:`glassfish` section of :doc:`prerequisites` for details and init scripts for running Glassfish as non-root.
 
 Related to this is that you should remove ``/root/.glassfish/pass`` to ensure that Glassfish isn't ever accidentally started as root. Without the password, Glassfish won't be able to start as root, which is a good thing.
 
 Enforce Strong Passwords for User Accounts
-++++++++++++++++++++++++++++++++++++++++++
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Dataverse only stores passwords (as salted hash, and using a strong hashing algorithm) for "builtin" users. You can increase the password complexity rules to meet your security needs. If you have configured your Dataverse installation to allow login from remote authentication providers such as Shibboleth, ORCID, GitHub or Google, you do not have any control over those remote providers' password complexity rules. See the "Auth Modes: Local vs. Remote vs. Both" section below for more on login options.
+Dataverse only stores passwords (as salted hash, and using a strong hashing algorithm) for "builtin" users. You can increase the password complexity rules to meet your security needs. If you have configured your Dataverse installation to allow login from remote authentication providers such as Shibboleth, ORCID, GitHub or Google, you do not have any control over those remote providers' password complexity rules. See the :ref:`auth-modes` section below for more on login options.
 
 Even if you are satisfied with the out-of-the-box password complexity rules Dataverse ships with, for the "dataverseAdmin" account you should use a strong password so the hash cannot easily be cracked through dictionary attacks.
 
@@ -73,6 +76,8 @@ Password complexity rules for "builtin" accounts can be adjusted with a variety 
 - :ref:`:PVDictionaries`
 - :ref:`:PVGoodStrength`
 - :ref:`:PVCustomPasswordResetAlertMessage`
+
+.. _network-ports:
 
 Network Ports
 -------------
@@ -110,7 +115,7 @@ Root Dataverse Permissions
 
 The user who creates a dataverse is given the "Admin" role on that dataverse. The root dataverse is created automatically for you by the installer and the "Admin" is the superuser account ("dataverseAdmin") we used in the :doc:`installation-main` section to confirm that we can log in. These next steps of configuring the root dataverse require the "Admin" role on the root dataverse, but not the much more powerful superuser attribute. In short, users with the "Admin" role are subject to the permission system. A superuser, on the other hand, completely bypasses the permission system. You can give non-superusers the "Admin" role on the root dataverse if you'd like them to configure the root dataverse.
 
-In order for non-superusers to start creating dataverses or datasets, you need click "Edit" then "Permissions" and make choices about which users can add dataverses or datasets within the root dataverse. (There is an API endpoint for this operation as well.) Again, the user who creates a dataverse will be granted the "Admin" role on that dataverse. Non-superusers who are not "Admin" on the root dataverse will not be able to to do anything useful until the root dataverse has been published.
+In order for non-superusers to start creating dataverses or datasets, you need click "Edit" then "Permissions" and make choices about which users can add dataverses or datasets within the root dataverse. (There is an API endpoint for this operation as well.) Again, the user who creates a dataverse will be granted the "Admin" role on that dataverse. Non-superusers who are not "Admin" on the root dataverse will not be able to do anything useful until the root dataverse has been published.
 
 As the person installing Dataverse you may or may not be a local metadata expert. You may want to have others sign up for accounts and grant them the "Admin" role at the root dataverse to configure metadata fields, templates, browse/search facets, guestbooks, etc. For more on these topics, consult the :doc:`/user/dataverse-management` section of the User Guide.
 
@@ -179,6 +184,8 @@ Here are the configuration options for handles:
 
 Note: If you are **minting your own handles** and plan to set up your own handle service, please refer to `Handle.Net documentation <http://handle.net/hnr_documentation.html>`_.
 
+.. _auth-modes:
+
 Auth Modes: Local vs. Remote vs. Both
 -------------------------------------
 
@@ -227,28 +234,29 @@ To support multiple stores, Dataverse now requires an id, type, and label for ea
     ./asadmin $ASADMIN_OPTS create-jvm-options "\-Ddataverse.files.<id>.type=<type>"
     ./asadmin $ASADMIN_OPTS create-jvm-options "\-Ddataverse.files.<id>.label=<label>"
 
-For backward compatibility, the id and type should be the same, and the label can be set to the same value as well. For example, the following would define a backward compatible file store:
-
-.. code-block:: none
-
-    ./asadmin $ASADMIN_OPTS create-jvm-options "\-Ddataverse.files.file.type=file"
-    ./asadmin $ASADMIN_OPTS create-jvm-options "\-Ddataverse.files.file.label=file"
-  
-or a file or swift store, this is all that is needed for backward compatibility. For an s3 store, any additional options must be changed to conform to the new, more consistent naming convention using a . after the store's id ('s3' for backward compatibility) For example:
-
-.. code-block:: none
-
-    ./asadmin delete-jvm-options "-Ddataverse.files.s3-bucket-name=<your_bucket_name>"
-    ./asadmin create-jvm-options "-Ddataverse.files.s3.bucket-name=<your_bucket_name>"
-
 Out of the box, Dataverse is configured to use local file storage in the 'file' store by default. You can add additional stores and, as a superuser, configure specific dataverses to use them (by editing the 'General Information' for the dataverse as described in the :doc:`dataverses-datasets` section).
-However, if you wish to change which store is used by default, you'll need to delete the existing default storage driver and set a new one using jvm options.
+
+Note that the "\-Ddataverse.files.directory", if defined, continues to control where temporary files are stored (in the /temp subdir of that directory), independent of the location of any 'file' store defined above.
+
+If you wish to change which store is used by default, you'll need to delete the existing default storage driver and set a new one using jvm options.
 
 ::
 
   ./asadmin $ASADMIN_OPTS delete-jvm-options "-Ddataverse.files.storage-driver-id=file"
   ./asadmin $ASADMIN_OPTS create-jvm-options "-Ddataverse.files.storage-driver-id=<id>"
+  
+  It is also possible to set maximum file upload size limits per store. See the :ref:`:MaxFileUploadSizeInBytes` setting below.
 
+File Storage
+++++++++++++
+
+File stores have one option - the directory where files should be stored. This can be set using
+
+.. code-block:: none
+
+    ./asadmin $ASADMIN_OPTS create-jvm-options "\-Ddataverse.files.<id>.directory=<file directory>"
+    
+Multiple file stores should specify different directories (which would nominally be the reason to use multiple file stores), but one may share the same directory as "\-Ddataverse.files.directory" option - this would result in temp files being stored in the /temp subdirectory within the file store's root directory.
 
 Swift Storage
 +++++++++++++
@@ -903,10 +911,12 @@ Setting Up Integrations
 
 Before going live, you might want to consider setting up integrations to make it easier for your users to deposit or explore data. See the :doc:`/admin/integrations` section of the Admin Guide for details.
 
+.. _jvm-options:
+
 JVM Options
 -----------
 
-JVM stands Java Virtual Machine and as a Java application, Glassfish can read JVM options when it is started. A number of JVM options are configured by the installer below is a complete list of the Dataverse-specific JVM options. You can inspect the configured options by running:
+JVM stands for Java Virtual Machine and as a Java application, Glassfish can read JVM options when it is started. A number of JVM options are configured by the installer below is a complete list of the Dataverse-specific JVM options. You can inspect the configured options by running:
 
 ``./asadmin list-jvm-options | egrep 'dataverse|doi'``
 
@@ -1120,6 +1130,8 @@ By default, download URLs to files will be included in Schema.org JSON-LD output
 Please note that there are other reasons why download URLs may not be included for certain files such as if a guestbook entry is required or if the file is restricted.
 
 For more on Schema.org JSON-LD, see the :doc:`/admin/metadataexport` section of the Admin Guide.
+
+.. _database-settings:
 
 Database Settings
 -----------------
@@ -1375,8 +1387,6 @@ To delete language specific option,
 
 ``curl -X DELETE http://localhost:8080/api/admin/settings/:ApplicationTermsOfUse/lang/fr``
 
-Unfortunately, in most cases, the text file will probably be too big to upload (>1024 characters) due to a bug. A workaround has been posted to https://github.com/IQSS/dataverse/issues/2669
-
 :ApplicationPrivacyPolicyUrl
 ++++++++++++++++++++++++++++
 
@@ -1388,7 +1398,7 @@ Specify a URL where users can read your Privacy Policy, linked from the bottom o
 ++++++++++++++
 
 Specify a URL where users can read your API Terms of Use.
-API users can retrieve this URL from the SWORD Service Document or the "info" section of our :doc:`/api/native-api` documentation.
+API users can retrieve this URL from the SWORD Service Document or the :ref:`info` section of our :doc:`/api/native-api` documentation.
 
 ``curl -X PUT -d https://dataverse.org/best-practices/harvard-api-tou http://localhost:8080/api/admin/settings/:ApiTermsOfUse``
 
@@ -1403,6 +1413,12 @@ See also :ref:`Privacy Considerations <PrivacyConsiderations>` above.
 Set ``:ExcludeEmailFromExport`` to prevent email addresses for contacts from being exposed in XML or JSON representations of dataset and dataverse metadata. For a list exported formats such as DDI, see the :doc:`/admin/metadataexport` section of the Admin Guide.
 
 ``curl -X PUT -d true http://localhost:8080/api/admin/settings/:ExcludeEmailFromExport``
+
+Note: After making a change to this setting, a reExportAll needs to be run before the changes will be reflected in the exports:
+
+``curl http://localhost:8080/api/admin/metadata/reExportAll``
+
+This will *force* a re-export of every published, local dataset, regardless of whether it has already been exported or not. 
 
 :NavbarAboutUrl
 +++++++++++++++
@@ -1462,7 +1478,14 @@ Alongside the ``:StatusMessageHeader`` you need to add StatusMessageText for the
 :MaxFileUploadSizeInBytes
 +++++++++++++++++++++++++
 
-Set `MaxFileUploadSizeInBytes` to "2147483648", for example, to limit the size of files uploaded to 2 GB.
+This setting controls the maximum size of uploaded files. 
+- To have one limit for all stores, set `MaxFileUploadSizeInBytes` to "2147483648", for example, to limit the size of files uploaded to 2 GB:
+
+``curl -X PUT -d 2147483648 http://localhost:8080/api/admin/settings/:MaxFileUploadSizeInBytes``
+
+- To have limits per store with an optional default, use a serialized json object for the value of `MaxFileUploadSizeInBytes` with an entry per store, as in the following example, which maintains a 2 GB default and adds higher limits for stores with ids "fileOne" and "s3".
+ 
+``curl -X PUT -d '{"default":"2147483648","fileOne":"4000000000","s3":"8000000000"}' http://localhost:8080/api/admin/settings/:MaxFileUploadSizeInBytes``
 
 Notes:
 
@@ -1472,7 +1495,7 @@ Notes:
 
 - For larger file upload sizes, you may need to configure your reverse proxy timeout. If using apache2 (httpd) with Shibboleth, add a timeout to the ProxyPass defined in etc/httpd/conf.d/ssl.conf (which is described in the :doc:`/installation/shibboleth` setup).
 
-``curl -X PUT -d 2147483648 http://localhost:8080/api/admin/settings/:MaxFileUploadSizeInBytes``
+
 
 :ZipDownloadLimit
 +++++++++++++++++
@@ -1568,6 +1591,8 @@ Set ``GeoconnectCreateEditMaps`` to true to allow the user to create GeoConnect 
 Set ``GeoconnectViewMaps`` to true to allow a user to view existing maps. This boolean effects whether a user will see the "Explore" button.
 
 ``curl -X PUT -d true http://localhost:8080/api/admin/settings/:GeoconnectViewMaps``
+
+.. _:DatasetPublishPopupCustomText:
 
 :DatasetPublishPopupCustomText
 ++++++++++++++++++++++++++++++
@@ -1763,6 +1788,53 @@ You can set the value of "#THIS PAGE#" to the URL of your Dataverse homepage, or
 
 ``curl -X PUT -d true http://localhost:8080/api/admin/settings/:ShibPassiveLoginEnabled``
 
+:ShibAffiliationAttribute
++++++++++++++++++++++++++
+
+The Shibboleth affiliation attribute holds information about the affiliation of the user (e.g. "OU") and is read from the DiscoFeed at each login. ``:ShibAffiliationAttribute`` is a name of a Shibboleth attribute in the Shibboleth header which Dataverse will read from instead of DiscoFeed. If this value is not set or empty, Dataverse uses the DiscoFeed.
+
+If the attribute is not yet set for the Shibboleth, please consult the Shibboleth Administrators at your institution. Typically it requires changing of the `/etc/shibboleth/attribute-map.xml` file by adding an attribute request, e.g.
+
+```
+    <Attribute name="urn:oid:2.5.4.11" id="ou">
+        <AttributeDecoder xsi:type="StringAttributeDecoder" caseSensitive="false"/>
+    </Attribute>
+```
+
+In order to implement the change, you should restart Shibboleth and Apache2 services:
+
+```
+sudo service shibd restart
+sudo service apache2 restart
+```
+
+To check if the attribute is sent, you should log in again to Dataverse and check Shibboleth's transaction log. You should see something like this:
+
+```
+INFO Shibboleth-TRANSACTION [25]: Cached the following attributes with session (ID: _9d1f34c0733b61c0feb0ca7596ef43b2) for (applicationId: default) {
+INFO Shibboleth-TRANSACTION [25]: 	givenName (1 values)
+INFO Shibboleth-TRANSACTION [25]: 	ou (1 values)
+INFO Shibboleth-TRANSACTION [25]: 	sn (1 values)
+INFO Shibboleth-TRANSACTION [25]: 	eppn (1 values)
+INFO Shibboleth-TRANSACTION [25]: 	mail (1 values)
+INFO Shibboleth-TRANSACTION [25]: 	displayName (1 values)
+INFO Shibboleth-TRANSACTION [25]: }
+```
+
+If you see the attribue you requested in this list, you can set the attribute in Dataverse.
+
+To set ``:ShibAffiliationAttribute``:
+
+``curl -X PUT -d "ou" http://localhost:8080/api/admin/settings/:ShibAffiliationAttribute``
+
+To delete ``:ShibAffiliationAttribute``:
+
+``curl -X DELETE http://localhost:8080/api/admin/settings/:ShibAffiliationAttribute``
+
+To check the current value of ``:ShibAffiliationAttribute``:
+
+``curl -X GET http://localhost:8080/api/admin/settings/:ShibAffiliationAttribute``
+
 .. _:ComputeBaseUrl:
 
 :ComputeBaseUrl
@@ -1814,7 +1886,7 @@ The URL for your Repository Storage Abstraction Layer (RSAL) installation. This 
 This setting controls which upload methods are available to users of your installation of Dataverse. The following upload methods are available:
 
 - ``native/http``: Corresponds to "Upload with HTTP via your browser" and APIs that use HTTP (SWORD and native).
-- ``dcm/rsync+ssh``: Corresponds to "Upload with rsync+ssh via Data Capture Module (DCM)". A lot of setup is required, as explained in the :doc:`/developers/big-data-support` section of the Dev Guide.
+- ``dcm/rsync+ssh``: Corresponds to "Upload with rsync+ssh via Data Capture Module (DCM)". A lot of setup is required, as explained in the :doc:`/developers/big-data-support` section of the Developer Guide.
 
 Out of the box only ``native/http`` is enabled and will work without further configuration. To add multiple upload method, separate them using a comma like this:
 
@@ -1868,7 +1940,7 @@ Sets how long a cached metrics result is used before re-running the query for a 
 
 ``curl -X PUT -d 10080 http://localhost:8080/api/admin/settings/:MetricsCacheTimeoutMinutes``
 
-.. _MDCLogPath:
+.. _:MDCLogPath:
 
 :MDCLogPath
 +++++++++++
@@ -1876,6 +1948,8 @@ Sets how long a cached metrics result is used before re-running the query for a 
 Sets the path where the raw Make Data Count logs are stored before being processed. If not set, no logs will be created for Make Data Count. See also the :doc:`/admin/make-data-count` section of the Admin Guide.
 
 ``curl -X PUT -d '/usr/local/glassfish4/glassfish/domains/domain1/logs' http://localhost:8080/api/admin/settings/:MDCLogPath``
+
+.. _:DisplayMDCMetrics:
 
 :DisplayMDCMetrics
 ++++++++++++++++++

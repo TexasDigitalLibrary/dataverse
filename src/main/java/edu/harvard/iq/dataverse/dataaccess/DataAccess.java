@@ -23,16 +23,14 @@ package edu.harvard.iq.dataverse.dataaccess;
 import edu.harvard.iq.dataverse.DvObject;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.logging.Logger;
-import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.Set;
+import java.util.logging.Logger;
+
+import org.apache.commons.lang.StringUtils;
 /**
-*
-* @author Leonid Andreev
-*/
-
-
+ *
+ * @author Leonid Andreev
+ */
 
 
 public class DataAccess {
@@ -43,9 +41,10 @@ public class DataAccess {
 
     };
 
-
-    public static final String DEFAULT_STORAGE_DRIVER_IDENTIFIER = System.getProperty("dataverse.files.storage-driver-id");
-
+    //Default to "file" is for tests only
+    public static final String DEFAULT_STORAGE_DRIVER_IDENTIFIER = System.getProperty("dataverse.files.storage-driver-id", "file");
+    public static final String UNDEFINED_STORAGE_DRIVER_IDENTIFIER = "undefined"; //Used in dataverse.xhtml as a non-null selection option value (indicating a null driver/inheriting the default)
+    
     // The getStorageIO() methods initialize StorageIO objects for
     // datafiles that are already saved using one of the supported Dataverse
     // DataAccess IO drivers.
@@ -63,7 +62,7 @@ public class DataAccess {
         }
         String storageIdentifier = dvObject.getStorageIdentifier();
         int separatorIndex = storageIdentifier.indexOf("://");
-    	String storageDriverId = "file"; //default
+    	String storageDriverId = DEFAULT_STORAGE_DRIVER_IDENTIFIER; //default
         if(separatorIndex>0) {
         	storageDriverId = storageIdentifier.substring(0,separatorIndex);
         }
@@ -85,7 +84,7 @@ public class DataAccess {
         // "storage identifier".
         // -- L.A. 4.0.2
 
-
+        logger.warning("Could not find storage driver for: " + storageIdentifier);
         throw new IOException("getDataAccessObject: Unsupported storage method.");
     }
 
@@ -105,6 +104,7 @@ public class DataAccess {
         case "swift":
             return new SwiftAccessIO<>(storageLocation, storageDriverId);
         default:
+        	logger.warning("Could not find storage driver for: " + fullStorageLocation);
         	throw new IOException("getDirectStorageIO: Unsupported storage method.");
         }
     }
@@ -113,7 +113,7 @@ public class DataAccess {
     	//default if no prefix
     	String storageIdentifier=storageLocation;
         int separatorIndex = storageLocation.indexOf("://");
-    	String storageDriverId = "file"; //default
+    	String storageDriverId = ""; //default
         if(separatorIndex>0) {
         	storageDriverId = storageLocation.substring(0,separatorIndex);
         	storageIdentifier = storageLocation.substring(separatorIndex + 3);
@@ -122,10 +122,18 @@ public class DataAccess {
     }
     
     public static String getStorarageIdFromLocation(String location) {
+    	if(location.contains("://")) {
+    		//It's a full location with a driverId, so strip and reapply the driver id
+    		//NOte that this will strip the bucketname out (which s3 uses) but the S3IOStorage class knows to look at re-insert it
+    		return location.substring(0,location.indexOf("://") +3) + location.substring(location.lastIndexOf('/')+1); 
+    	}
     	return location.substring(location.lastIndexOf('/')+1);
     }
     
     public static String getDriverType(String driverId) {
+    	if(driverId.isEmpty() || driverId.equals("tmp")) {
+    		return "tmp";
+    	}
     	return System.getProperty("dataverse.files." + driverId + ".type", "Undefined");
     }
 
@@ -138,7 +146,8 @@ public class DataAccess {
                 || storageTag.isEmpty()) {
             throw new IOException("getDataAccessObject: null or invalid datafile.");
         }
-        return createNewStorageIO(dvObject, storageTag, dvObject.getDataverseContext().getStorageDriverId());
+                
+        return createNewStorageIO(dvObject, storageTag, dvObject.getDataverseContext().getEffectiveStorageDriverId());
     }
 
     public static <T extends DvObject> StorageIO<T> createNewStorageIO(T dvObject, String storageTag, String storageDriverId) throws IOException {
@@ -147,13 +156,22 @@ public class DataAccess {
                 || storageTag.isEmpty()) {
             throw new IOException("getDataAccessObject: null or invalid datafile.");
         }
+        
+        /* Prior versions sometimes called createNewStorageIO(object, "placeholder") with an existing object to get a ~clone for use in storing/reading Aux files
+         * Since PR #6488 for multi-store - this can return a clone using a different store than the original (e.g. if the default store changes) which causes errors
+         * This if will catch any cases where that's attempted.
+         */
+        // Tests send objects with no storageIdentifier set
+        if((dvObject.getStorageIdentifier()!=null) && dvObject.getStorageIdentifier().contains("://")) {
+        	throw new IOException("Attempt to create new StorageIO for already stored object: " + dvObject.getStorageIdentifier());
+        }
 
         StorageIO<T> storageIO = null;
-
+        
         dvObject.setStorageIdentifier(storageTag);
 
-        if (storageDriverId == null) {
-        	storageDriverId = "file";
+        if (StringUtils.isBlank(storageDriverId)) {
+        	storageDriverId = DEFAULT_STORAGE_DRIVER_IDENTIFIER;
         }
         String storageType = getDriverType(storageDriverId);
         switch(storageType) {
@@ -167,19 +185,33 @@ public class DataAccess {
         	storageIO = new S3AccessIO<>(dvObject, null, storageDriverId);
         	break;
         default:
+        	logger.warning("Could not find storage driver for: " + storageTag);
         	throw new IOException("createDataAccessObject: Unsupported storage method " + storageDriverId);
         }
+        // Note: All storageIO classes must assure that dvObject instances' storageIdentifiers are prepended with 
+        // the <driverId>:// + any additional storageIO type information required (e.g. the bucketname for s3/swift)
+        // This currently happens when the storageIO is opened for write access
         storageIO.open(DataAccessOption.WRITE_ACCESS);
         return storageIO;
     }
 
     static HashMap<String, String> drivers = null;
     
-    public static Set<Entry<String, String>> getStorageDriverLabels() {
+    public static String getStorageDriverId(String driverLabel) {
     	if (drivers==null) {
     		populateDrivers();
     	}
-    	return drivers.entrySet();
+    	if(!StringUtils.isBlank(driverLabel) && drivers.containsKey(driverLabel)) {
+    		return drivers.get(driverLabel);
+    	} 
+    	return DEFAULT_STORAGE_DRIVER_IDENTIFIER;
+    }
+
+    public static HashMap<String, String> getStorageDriverLabels() {
+    	if (drivers==null) {
+    		populateDrivers();
+    	}
+    	return drivers;
     }
 
     private static void populateDrivers() {
@@ -196,15 +228,18 @@ public class DataAccess {
     }
 
     public static String getStorageDriverLabelFor(String storageDriverId) {
-    	String label = "<<Default>>";
-    	if (drivers==null) {
-    		populateDrivers();
-    	}
-    	if(drivers.containsValue(storageDriverId)) {
-    		for(String key: drivers.keySet()) {
-    			if(drivers.get(key).equals(storageDriverId)) {
-    				label = key;
-    				break;
+    	String label = null;
+    	if(!StringUtils.isEmpty(storageDriverId)) {
+    		if (drivers==null) {
+    			populateDrivers();
+    		}
+
+    		if(drivers.containsValue(storageDriverId)) {
+    			for(String key: drivers.keySet()) {
+    				if(drivers.get(key).equals(storageDriverId)) {
+    					label = key;
+    					break;
+    				}
     			}
     		}
     	}

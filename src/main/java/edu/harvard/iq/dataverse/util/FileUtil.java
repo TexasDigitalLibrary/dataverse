@@ -714,7 +714,7 @@ public class FileUtil implements java.io.Serializable  {
         // save the file, in the temporary location for now: 
         Path tempFile = null; 
         
-        Long fileSizeLimit = systemConfig.getMaxFileUploadSize();
+        Long fileSizeLimit = systemConfig.getMaxFileUploadSizeForStore(version.getDataset().getOwner().getEffectiveStorageDriverId());
         String finalType = null; 
 		if (newStorageIdentifier == null) {
 			if (getFilesTempDirectory() != null) {
@@ -1084,10 +1084,7 @@ public class FileUtil implements java.io.Serializable  {
 				}
 				return null;
 
-			} else {
-				// ToDo what subset of checks from determineFileType makes sense?
-				finalType = suppliedContentType;
-			}
+			} 
 		} else {
 			//Remote file, trust supplier
 			finalType = suppliedContentType;
@@ -1280,7 +1277,7 @@ public class FileUtil implements java.io.Serializable  {
             case MIME_TYPE_CSV:
             case MIME_TYPE_CSV_ALT:
             case MIME_TYPE_TSV:
-            case MIME_TYPE_TSV_ALT:
+            //case MIME_TYPE_TSV_ALT:
             case MIME_TYPE_XLSX:
             case MIME_TYPE_SPSS_SAV:
             case MIME_TYPE_SPSS_POR:
@@ -1315,7 +1312,7 @@ public class FileUtil implements java.io.Serializable  {
     }
     
     public static void generateS3PackageStorageIdentifier(DataFile dataFile) {
-    	String driverId = dataFile.getDataverseContext().getStorageDriverId();
+    	String driverId = dataFile.getDataverseContext().getEffectiveStorageDriverId();
 		
         String bucketName = System.getProperty("dataverse.files." + driverId + ".bucket-name");
         String storageId = driverId + "://" + bucketName + ":" + dataFile.getFileMetadata().getLabel();
@@ -1323,6 +1320,7 @@ public class FileUtil implements java.io.Serializable  {
     }
     
     public static void generateStorageIdentifier(DataFile dataFile) {
+    	//Is it true that this is only used for temp files and we could safely prepend "tmp://" to indicate that?
         dataFile.setStorageIdentifier(generateStorageIdentifier());
     }
     
@@ -1649,7 +1647,7 @@ public class FileUtil implements java.io.Serializable  {
     }
     
     public static S3AccessIO getS3AccessForDirectUpload(Dataset dataset) {
-    	String driverId = dataset.getDataverseContext().getStorageDriverId();
+    	String driverId = dataset.getDataverseContext().getEffectiveStorageDriverId();
     	boolean directEnabled = Boolean.getBoolean("dataverse.files." + driverId + ".upload-redirect");
     	//Should only be requested when it is allowed, but we'll log a warning otherwise
     	if(!directEnabled) {

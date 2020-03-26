@@ -502,10 +502,12 @@ public class AddReplaceFileHelper{
             return false;
             
         }
-        
-        if(optionalFileParams.hasCheckSum()) {
-        	newCheckSum = optionalFileParams.getCheckSum();
+        if(optionalFileParams != null) {
+        	if(optionalFileParams.hasCheckSum()) {
+        		newCheckSum = optionalFileParams.getCheckSum();
+        	}
         }
+
         msgt("step_030_createNewFilesViaIngest");
         if (!this.step_030_createNewFilesViaIngest()){
             return false;
@@ -951,14 +953,8 @@ public class AddReplaceFileHelper{
 				this.addErrorSevere(getBundleErr("file_upload_failed"));
 				return false;
 			} 
-				newStorageIdentifier = storageIdentifier;
-			
-		} else {
-			this.addErrorSevere(getBundleErr("file_identification_failed"));
-			return false;
-
-		}
-       
+		} 
+		
         newFileName = fileName;
         newFileContentType = fileContentType;
         
