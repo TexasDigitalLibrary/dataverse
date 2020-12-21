@@ -1722,11 +1722,12 @@ public class Admin extends AbstractApiBean {
      * @param
      * listonly - don't archive, just list unarchived versions
      * limit - max number to process
+     * lastestonly - only archive the latest versions
      * @return
      */
     @GET
     @Path("/archiveAllUnarchivedDataVersions")
-    public Response archiveAllUnarchivedDatasetVersions(@QueryParam("listonly") boolean listonly, @QueryParam("limit") Integer limit) {
+    public Response archiveAllUnarchivedDatasetVersions(@QueryParam("listonly") boolean listonly, @QueryParam("limit") Integer limit, @QueryParam("latestonly") boolean latestonly) {
 
         try {
             AuthenticatedUser au = findAuthenticatedUserOrDie();
@@ -1745,8 +1746,11 @@ public class Admin extends AbstractApiBean {
                         if (limit != null && current > limit) {
                             break;
                         }
-                        jab.add(dv.getDataset().getGlobalId().toString() + ", v" + dv.getFriendlyVersionNumber());
-                        logger.info("    " + dv.getDataset().getGlobalId().toString() + ", v" + dv.getFriendlyVersionNumber());
+                        if (!latestonly || dv.equals(dv.getDataset().getLatestVersionForCopy())) {
+                            jab.add(dv.getDataset().getGlobalId().toString() + ", v" + dv.getFriendlyVersionNumber());
+                            logger.info("    " + dv.getDataset().getGlobalId().toString() + ", v" + dv.getFriendlyVersionNumber());
+                            current++;
+                        }
                     }
                     return ok(jab); 
                 }
@@ -1763,21 +1767,23 @@ public class Admin extends AbstractApiBean {
                                 if (limit != null && (successes + failures) > limit) {
                                     break;
                                 }
-                                try {
-                                    AbstractSubmitToArchiveCommand cmd = ArchiverUtil.createSubmitToArchiveCommand(className, dvRequestService.getDataverseRequest(), dv);
+                                if (!latestonly || dv.equals(dv.getDataset().getLatestVersionForCopy())) {
+                                    try {
+                                        AbstractSubmitToArchiveCommand cmd = ArchiverUtil.createSubmitToArchiveCommand(className, dvRequestService.getDataverseRequest(), dv);
 
-                                    dv = commandEngine.submit(cmd);
-                                    if (dv.getArchivalCopyLocation() != null) {
-                                        successes++;
-                                        logger.info("DatasetVersion id=" + dv.getDataset().getGlobalId().toString() + " v" + dv.getFriendlyVersionNumber() + " submitted to Archive at: "
-                                                + dv.getArchivalCopyLocation());
-                                    } else {
+                                        dv = commandEngine.submit(cmd);
+                                        if (dv.getArchivalCopyLocation() != null) {
+                                            successes++;
+                                            logger.info("DatasetVersion id=" + dv.getDataset().getGlobalId().toString() + " v" + dv.getFriendlyVersionNumber() + " submitted to Archive at: "
+                                                    + dv.getArchivalCopyLocation());
+                                        } else {
+                                            failures++;
+                                            logger.severe("Error submitting version due to conflict/error at Archive for " + dv.getDataset().getGlobalId().toString() + " v" + dv.getFriendlyVersionNumber());
+                                        }
+                                    } catch (CommandException ex) {
                                         failures++;
-                                        logger.severe("Error submitting version due to conflict/error at Archive for " + dv.getDataset().getGlobalId().toString() + " v" + dv.getFriendlyVersionNumber());
+                                        logger.log(Level.SEVERE, "Unexpected Exception calling  submit archive command", ex);
                                     }
-                                } catch (CommandException ex) {
-                                    failures++;
-                                    logger.log(Level.SEVERE, "Unexpected Exception calling  submit archive command", ex);
                                 }
                                 logger.fine(successes + failures + " of " + total + " archive submissions complete");
                             }
